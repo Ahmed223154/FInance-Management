@@ -1,0 +1,50 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile Swift to iOS Binary
+        run: |
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          SWIFT_FILES=$(find . -name "*.swift" -not -path "*/.*")
+          
+          echo "Compiling files:"
+          echo "$SWIFT_FILES"
+          
+          xcrun swiftc \
+            -target arm64-apple-ios17.0 \
+            -sdk "$SDK_PATH" \
+            -parse-as-library \
+            $SWIFT_FILES \
+            -o FinanceApp
+
+      - name: Package into IPA with App Icon
+        run: |
+          mkdir -p Payload/FinanceApp.app
+          mv FinanceApp Payload/FinanceApp.app/
+          cp Info.plist Payload/FinanceApp.app/
+          
+          # Automatically generate required iOS app icon sizes
+          if [ -f "AppIcon.png" ]; then
+            sips -z 120 120 AppIcon.png --out Payload/FinanceApp.app/AppIcon60x60@2x.png
+            sips -z 180 180 AppIcon.png --out Payload/FinanceApp.app/AppIcon60x60@3x.png
+          fi
+          
+          zip -r FinanceApp.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinanceApp-IPA
+          path: FinanceApp.ipa
+          retention-days: 5
